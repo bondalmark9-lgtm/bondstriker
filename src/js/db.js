@@ -1,72 +1,25 @@
 /* =====================================================================
-   VOID STRIKER — cloud backend (Firebase Auth + Firestore)
+   VOID STRIKER — cloud backend client (Neon serverless Postgres)
    =====================================================================
-   This replaces the old localStorage-only "accounts" system so that
-   pilot accounts and best scores are shared across every browser and
-   device — not just the one they were created on.
+   This replaces the old Firebase (Auth + Firestore) version. The game
+   itself never talks to Postgres directly — browsers can't do that
+   safely. Instead this file calls a small API server (see server.js)
+   which is the only thing holding the Neon connection string.
 
    ------------------------------------------------------------------
-   ONE-TIME SETUP (you must do this before it will work):
+   ONE-TIME SETUP:
    ------------------------------------------------------------------
-   1. Go to https://console.firebase.google.com -> "Add project" (free).
-   2. In the project: Build -> Authentication -> Get started ->
-      enable the "Email/Password" sign-in provider.
-   3. In the project: Build -> Firestore Database -> Create database
-      (start in "production mode" is fine -- rules below lock it down).
-   4. Project settings (gear icon) -> General -> "Your apps" ->
-      Add app -> Web (</>) -> register it -> copy the firebaseConfig
-      object it gives you -> paste the values into FIREBASE_CONFIG
-      below.
-   5. Firestore Database -> Rules -> paste this, then Publish:
-
-        rules_version = '2';
-        service cloud.firestore {
-          match /databases/{database}/documents {
-            match /users/{userId} {
-              allow read: if request.auth != null;
-              allow write: if request.auth != null && request.auth.uid == userId;
-            }
-          }
-        }
-
-      This lets any signed-in pilot READ every profile (so the
-      leaderboard can show everyone), but only WRITE their own.
+   1. Deploy the accompanying server.js (see its own setup comment) —
+      to Render, Railway, Fly.io, a VPS, wherever. It needs to be
+      reachable over HTTPS from wherever this game is hosted.
+   2. Point API_BASE_URL below at that server's URL.
+   That's it — this file only makes HTTP requests, it holds no secrets.
    ===================================================================== */
 
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  onAuthStateChanged
-} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  collection,
-  query,
-  orderBy,
-  limit,
-  getDocs
-} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+/* ---- point this at your deployed API server ---- */
+const API_BASE_URL = 'https://YOUR-API-SERVER.example.com';
 
-/* ---- 4. Paste your project's config here ---- */
-const FIREBASE_CONFIG = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_PROJECT.firebaseapp.com',
-  projectId: 'YOUR_PROJECT',
-  storageBucket: 'YOUR_PROJECT.appspot.com',
-  messagingSenderId: 'YOUR_SENDER_ID',
-  appId: 'YOUR_APP_ID'
-};
-
-const firebaseApp = initializeApp(FIREBASE_CONFIG);
-const auth = getAuth(firebaseApp);
-const db = getFirestore(firebaseApp);
+const TOKEN_KEY = 'voidstriker.authToken';
 
 const DEFAULT_PROGRESS = {
   bestScore: 0,
@@ -90,87 +43,87 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
-function toPublicUser(uid, data) {
-  return {
-    id: uid,
-    username: data.username,
-    email: data.email,
-    accountType: 'account',
-    progress: Object.assign(cloneDefaultProgress(), data.progress || {})
-  };
+function getToken() {
+  try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; }
+}
+function setToken(token) {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch (e) { /* localStorage unavailable — session just won't persist */ }
 }
 
-/* Wait for Firebase to tell us whether anyone is already signed in
-   (it restores the session automatically), resolving once. */
-function waitForAuthReady() {
-  return new Promise(function (resolve) {
-    const unsubscribe = onAuthStateChanged(auth, function (user) {
-      unsubscribe();
-      resolve(user);
+async function apiRequest(path, options) {
+  options = options || {};
+  const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
+  const token = getToken();
+  if (token) headers.Authorization = 'Bearer ' + token;
+
+  let res;
+  try {
+    res = await fetch(API_BASE_URL + path, {
+      method: options.method || 'GET',
+      headers: headers,
+      body: options.body ? JSON.stringify(options.body) : undefined
     });
-  });
+  } catch (networkErr) {
+    throw new Error('Could not reach the server. Check your connection and try again.');
+  }
+
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* empty body */ }
+
+  if (!res.ok) {
+    if (res.status === 401) setToken(null);
+    throw new Error((data && data.error) || 'Something went wrong.');
+  }
+  return data;
 }
 
-async function fetchUserDoc(uid) {
-  const ref = doc(db, 'users', uid);
-  const snap = await getDoc(ref);
-  return snap.exists() ? snap.data() : null;
+function normalizeUser(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    accountType: 'account',
+    progress: Object.assign(cloneDefaultProgress(), user.progress || {})
+  };
 }
 
 (function () {
   window.GameDb = {
     async getCurrentUser() {
-      const user = await waitForAuthReady();
-      if (!user) return null;
-
-      let data = await fetchUserDoc(user.uid);
-      if (!data) {
-        // Auth account exists but the Firestore profile is missing
-        // (e.g. it was never created) -- recreate a minimal one.
-        data = {
-          username: normalizeName(user.email),
-          email: user.email,
-          progress: cloneDefaultProgress()
-        };
-        await setDoc(doc(db, 'users', user.uid), data);
+      if (!getToken()) return null;
+      try {
+        const data = await apiRequest('/api/me', { method: 'GET' });
+        return normalizeUser(data.user);
+      } catch (error) {
+        // Bad/expired token -- treat as signed out rather than surfacing an error.
+        setToken(null);
+        return null;
       }
-      return toPublicUser(user.uid, data);
     },
 
     async saveName(name) {
-      const user = auth.currentUser;
-      if (!user) throw new Error('You must be signed in.');
       const cleanName = normalizeName(name);
-      await updateDoc(doc(db, 'users', user.uid), { username: cleanName });
-      const data = await fetchUserDoc(user.uid);
-      return toPublicUser(user.uid, data);
+      const data = await apiRequest('/api/me/name', { method: 'PATCH', body: { name: cleanName } });
+      return normalizeUser(data.user);
     },
 
     async saveProgress(userId, progress) {
-      const user = auth.currentUser;
-      if (!user || user.uid !== userId) throw new Error('You must be signed in.');
-      const current = await fetchUserDoc(user.uid);
-      const mergedProgress = Object.assign(cloneDefaultProgress(), (current && current.progress) || {}, progress);
-      await updateDoc(doc(db, 'users', user.uid), { progress: mergedProgress });
-      return toPublicUser(user.uid, Object.assign({}, current, { progress: mergedProgress }));
+      const data = await apiRequest('/api/me/progress', { method: 'PATCH', body: { progress: progress } });
+      return normalizeUser(data.user);
     },
 
     async signIn(email, password) {
       const cleanEmail = normalizeEmail(email);
-      let cred;
-      try {
-        cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
-      } catch (error) {
-        if (error.code === 'auth/user-not-found') throw new Error('No pilot account found for that email.');
-        if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') throw new Error('Incorrect password.');
-        throw new Error(error.message || 'Could not sign in.');
-      }
-      let data = await fetchUserDoc(cred.user.uid);
-      if (!data) {
-        data = { username: normalizeName(cleanEmail), email: cleanEmail, progress: cloneDefaultProgress() };
-        await setDoc(doc(db, 'users', cred.user.uid), data);
-      }
-      return toPublicUser(cred.user.uid, data);
+      const data = await apiRequest('/api/auth/signin', {
+        method: 'POST',
+        body: { email: cleanEmail, password: password }
+      });
+      setToken(data.token);
+      return normalizeUser(data.user);
     },
 
     async signUp(username, email, password) {
@@ -179,38 +132,22 @@ async function fetchUserDoc(uid) {
       if (!cleanEmail || !cleanEmail.includes('@')) throw new Error('Enter a valid email.');
       if (!password || password.length < 6) throw new Error('Password must be at least 6 characters.');
 
-      let cred;
-      try {
-        cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-      } catch (error) {
-        if (error.code === 'auth/email-already-in-use') throw new Error('An account with that email already exists.');
-        throw new Error(error.message || 'Could not create account.');
-      }
-
-      const data = { username: cleanName, email: cleanEmail, progress: cloneDefaultProgress() };
-      await setDoc(doc(db, 'users', cred.user.uid), data);
-      return toPublicUser(cred.user.uid, data);
+      const data = await apiRequest('/api/auth/signup', {
+        method: 'POST',
+        body: { username: cleanName, email: cleanEmail, password: password }
+      });
+      setToken(data.token);
+      return normalizeUser(data.user);
     },
 
     async signOut() {
-      await firebaseSignOut(auth);
+      setToken(null);
       return null;
     },
 
     async getLeaderboard() {
-      const q = query(collection(db, 'users'), orderBy('progress.bestScore', 'desc'), limit(50));
-      const snap = await getDocs(q);
-      const rows = [];
-      snap.forEach(function (docSnap) {
-        const data = docSnap.data();
-        rows.push({
-          userId: docSnap.id,
-          username: data.username,
-          bestScore: (data.progress && data.progress.bestScore) || 0,
-          source: 'account'
-        });
-      });
-      return rows;
+      const data = await apiRequest('/api/leaderboard', { method: 'GET' });
+      return data.leaderboard;
     }
   };
 })();

@@ -1,27 +1,19 @@
 {
-  "name": "applegame",
-  "version": "0.0.0",
-  "private": true,
+  "name": "void-striker-backend",
+  "version": "1.0.0",
+  "description": "API server for VOID STRIKER — Neon Postgres backend (replaces Firebase Auth + Firestore)",
   "type": "module",
+  "main": "server.js",
   "scripts": {
-    "client": "vite",
-    "dev": "npm run client",
-    "server": "node server.js",
-    "dev:full": "npm run client",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "devDependencies": {
-    "concurrently": "^9.2.1",
-    "vite": "^8.1.0"
+    "start": "node server.js",
+    "migrate": "node migrate.js"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^0.9.5",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.1",
-    "express": "^5.1.0",
-    "git": "^0.1.5",
-    "mysql2": "^3.14.3",
-    "phaser": "^4.2.0",
-    "sql.js": "^1.14.1"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
   }
 }
