@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="icon" href="/assets/images/players/nova.png">
-  <script type="module" crossorigin src="/assets/index-Djts6LeB.js"></script>
+  <script type="module" crossorigin src="/assets/index-B-v-0yXC.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-BCfcUxRI.css">
 </head>
 <body ng-controller="MainCtrl as vm" ng-cloak>
@@ -55,6 +55,39 @@
 
   <!-- ============ TEMPLATES ============ -->
 
+  <script type="text/ng-template" id="tpl-auth">
+    <div class="auth-scene">
+      <div class="panel auth-panel">
+        <div class="auth-badge">PILOT ACCESS REQUIRED</div>
+        <div class="auth-hero">
+          <div class="auth-ring"></div>
+          <img class="hero-art" ng-src="{{vm.players[vm.selectedPlayer].img}}" alt="">
+        </div>
+        <h1 class="logo">VOID <span>STRIKER</span></h1>
+        <p class="tagline">Sign in or create a pilot account to launch.</p>
+        <form class="auth-form" ng-submit="vm.submitAuth()">
+          <div class="segmented">
+            <button type="button" ng-class="{active: vm.authMode === 'signIn'}" ng-click="vm.setAuthMode('signIn')">LOG IN</button>
+            <button type="button" ng-class="{active: vm.authMode === 'signUp'}" ng-click="vm.setAuthMode('signUp')">SIGN UP</button>
+          </div>
+          <div class="field-group" ng-if="vm.authMode === 'signUp'">
+            <label class="field-label" for="gate-auth-name">PILOT NAME</label>
+            <input id="gate-auth-name" class="text-field" type="text" ng-model="vm.auth.username" autocomplete="username" minlength="3" maxlength="24">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="gate-auth-email">EMAIL</label>
+            <input id="gate-auth-email" class="text-field" type="email" ng-model="vm.auth.email" autocomplete="email" required>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="gate-auth-password">PASSWORD</label>
+            <input id="gate-auth-password" class="text-field" type="password" ng-model="vm.auth.password" autocomplete="{{vm.authMode === 'signUp' ? 'new-password' : 'current-password'}}" minlength="6" required>
+          </div>
+          <div class="auth-error" ng-if="vm.authError">{{vm.authError}}</div>
+          <button class="btn btn-primary auth-submit" type="submit" ng-disabled="vm.authBusy">{{vm.authBusy ? 'WORKING...' : (vm.authMode === 'signUp' ? 'CREATE PILOT' : 'LOG IN')}}</button>
+        </form>
+      </div>
+    </div>
+  </script>
 
   <script type="text/ng-template" id="tpl-menu">
     <div class="panel menu-panel">

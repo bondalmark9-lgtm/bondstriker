@@ -33,16 +33,21 @@
       const BULLET_ENEMY_IMG = ASSET_BASE + 'ui/bullet_enemy.png';
 
       vm.livesSlots = [0, 1, 2];
-      vm.screen = 'menu';
+      vm.screen = 'auth';
       GameDb.getCurrentUser().then(function (user) {
         $scope.$applyAsync(function () {
           vm.currentUser = user;
-          applyUserProgress(user);
-          vm.screen = 'menu';
+          if (user) {
+            applyUserProgress(user);
+            vm.screen = 'menu';
+          } else {
+            vm.screen = 'auth';
+          }
         });
       }).catch(function () {
         $scope.$applyAsync(function () {
-          vm.screen = 'menu';
+          vm.currentUser = null;
+          vm.screen = 'auth';
         });
       });
       vm.selectedPlayer = 0;
@@ -86,7 +91,13 @@
 
       applyUserProgress(vm.currentUser);
 
-      vm.goTo = function (screen) { vm.screen = screen; };
+      vm.goTo = function (screen) {
+        if (!vm.isSignedIn() && screen !== 'auth') {
+          vm.screen = 'auth';
+          return;
+        }
+        vm.screen = screen;
+      };
       vm.selectPlayer = function (i) {
         if (!vm.purchasedPlayers[i]) return;
         vm.selectedPlayer = i;
@@ -105,6 +116,10 @@
       };
 
       vm.startRun = function () {
+        if (!vm.isSignedIn()) {
+          vm.screen = 'auth';
+          return;
+        }
         vm.wave = 1;
         vm.score = 0;
         vm.lives = 3;
@@ -114,8 +129,14 @@
       };
       vm.restartRun = vm.startRun;
       vm.pauseGame = function () { if (vm.screen === 'game') vm.screen = 'pause'; };
-      vm.resumeGame = function () { vm.screen = 'game'; };
-      vm.quitToMenu = function () { vm.screen = 'menu'; };
+      vm.resumeGame = function () {
+        if (!vm.isSignedIn()) {
+          vm.screen = 'auth';
+          return;
+        }
+        vm.screen = 'game';
+      };
+      vm.quitToMenu = function () { vm.goTo('menu'); };
       vm.applyMusicVolume = function () { setMusicGain(vm.settings.musicVol); saveProfile(); };
       vm.saveSettings = saveProfile;
       vm.savePilotName = function () {
@@ -156,6 +177,7 @@
             vm.auth.password = '';
             vm.authError = '';
             vm.authBusy = false;
+            vm.screen = 'menu';
           });
         }).catch(function (error) {
           $scope.$applyAsync(function () {
@@ -168,14 +190,19 @@
         GameDb.signOut().then(function (user) {
           $scope.$applyAsync(function () {
             vm.currentUser = user;
-            applyUserProgress(user);
+            applyUserProgress(null);
             vm.auth.password = '';
             vm.authError = '';
+            vm.screen = 'auth';
           });
         });
       };
 
       vm.openLeaderboard = function () {
+        if (!vm.isSignedIn()) {
+          vm.screen = 'auth';
+          return;
+        }
         vm.screen = 'leaderboard';
         vm.leaderboardBusy = true;
         vm.leaderboardError = '';

@@ -160,11 +160,7 @@ async function saveAccountProgress(userId, progress) {
         }
       }
 
-      const profile = readProfile();
-      try {
-        await syncDevice(profile);
-      } catch (error) {}
-      return profile;
+      return null;
     },
 
     async saveName(name) {
@@ -242,11 +238,7 @@ async function saveAccountProgress(userId, progress) {
 
     async signOut() {
       clearSession();
-      const profile = readProfile();
-      try {
-        await syncDevice(profile);
-      } catch (error) {}
-      return profile;
+      return null;
     },
 
     async getLeaderboard() {
