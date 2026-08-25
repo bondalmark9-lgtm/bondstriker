@@ -1,6 +1,7 @@
 const PROFILE_KEY = 'voidStrikerGuestProfile.v1';
 const SESSION_KEY = 'voidStrikerSession.v1';
 const DEVICE_KEY = 'voidStrikerDeviceId.v1';
+const ACCOUNTS_KEY = 'voidStrikerAccounts.v1';
 
 const DEFAULT_PROFILE = {
   id: '',
@@ -47,6 +48,10 @@ function normalizeName(name) {
   return clean || DEFAULT_PROFILE.username;
 }
 
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
 function normalizeProfile(profile) {
   const merged = Object.assign(cloneDefaultProfile(), profile || {});
   merged.progress = Object.assign(cloneDefaultProfile().progress, (profile && profile.progress) || {});
@@ -91,18 +96,42 @@ function clearSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
-async function apiJson(path, options) {
-  const response = await fetch(path, options);
-  const data = await response.json().catch(function () { return {}; });
-  if (!response.ok) throw new Error(data.error || 'Request failed.');
-  return data;
+/* ================= LOCAL "ACCOUNTS" STORE ================= */
+/* No backend server exists for this game, so accounts are kept
+   in this browser's localStorage. Good enough for a solo/offline
+   game; NOT real server-side auth (don't reuse real passwords). */
+
+function readAccounts() {
+  try {
+    return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '{}');
+  } catch (error) {
+    return {};
+  }
 }
 
-function jsonOptions(method, body) {
+function writeAccounts(accounts) {
+  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+async function hashPassword(password) {
+  const enc = new TextEncoder().encode('void-striker::' + password);
+  if (window.crypto && window.crypto.subtle) {
+    const buf = await window.crypto.subtle.digest('SHA-256', enc);
+    return Array.from(new Uint8Array(buf)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  }
+  // Fallback if SubtleCrypto isn't available (e.g. non-HTTPS context).
+  let hash = 0;
+  for (let i = 0; i < password.length; i++) hash = ((hash << 5) - hash + password.charCodeAt(i)) | 0;
+  return 'fallback:' + hash;
+}
+
+function toPublicUser(account) {
   return {
-    method: method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    id: account.id,
+    username: account.username,
+    email: account.email,
+    accountType: 'account',
+    progress: account.progress
   };
 }
 
@@ -119,29 +148,6 @@ function mergeProgress(accountProgress, deviceProgress) {
   });
 }
 
-async function syncDevice(profile) {
-  const local = writeProfile(profile || readProfile());
-  const data = await apiJson('/api/device-progress', jsonOptions('POST', {
-    deviceId: getDeviceId(),
-    username: local.username,
-    progress: local.progress
-  }));
-  return Object.assign({}, local, data.user || {}, {
-    id: deviceUserId(),
-    accountType: 'device',
-    progress: local.progress
-  });
-}
-
-async function saveAccountProgress(userId, progress) {
-  const data = await apiJson('/api/users/' + encodeURIComponent(userId) + '/progress', jsonOptions('PATCH', {
-    progress: progress
-  }));
-  const user = data.user;
-  if (user) user.accountType = 'account';
-  return user;
-}
-
 (function () {
   window.GameDb = {
     defaults: { users: [DEFAULT_PROFILE] },
@@ -149,18 +155,12 @@ async function saveAccountProgress(userId, progress) {
     async getCurrentUser() {
       const session = readSession();
       if (session && session.id) {
-        try {
-          const data = await apiJson('/api/users/' + encodeURIComponent(session.id));
-          if (data.user) {
-            data.user.accountType = 'account';
-            return data.user;
-          }
-        } catch (error) {
-          clearSession();
-        }
+        const accounts = readAccounts();
+        const account = accounts[session.id];
+        if (account) return toPublicUser(account);
+        clearSession();
       }
-
-      return null;
+      return readProfile();
     },
 
     async saveName(name) {
@@ -168,94 +168,108 @@ async function saveAccountProgress(userId, progress) {
       const session = readSession();
 
       if (session && session.id) {
-        const data = await apiJson('/api/users/' + encodeURIComponent(session.id) + '/profile', jsonOptions('PATCH', {
-          username: cleanName
-        }));
-        if (data.user) {
-          data.user.accountType = 'account';
-          return data.user;
+        const accounts = readAccounts();
+        const account = accounts[session.id];
+        if (account) {
+          account.username = cleanName;
+          writeAccounts(accounts);
+          return toPublicUser(account);
         }
       }
 
       const profile = readProfile();
       profile.username = cleanName;
-      writeProfile(profile);
-      try {
-        return await syncDevice(profile);
-      } catch (error) {
-        return profile;
-      }
+      return writeProfile(profile);
     },
 
     async saveProgress(userId, progress) {
+      const session = readSession();
+
+      if (session && session.id && userId === session.id) {
+        const accounts = readAccounts();
+        const account = accounts[session.id];
+        if (account) {
+          account.progress = Object.assign({}, account.progress, progress);
+          writeAccounts(accounts);
+          return toPublicUser(account);
+        }
+      }
+
       const profile = readProfile();
       profile.progress = Object.assign({}, profile.progress, progress);
-      writeProfile(profile);
-
-      const session = readSession();
-      if (session && session.id && userId === session.id) {
-        return saveAccountProgress(session.id, progress);
-      }
-
-      try {
-        return await syncDevice(profile);
-      } catch (error) {
-        return profile;
-      }
+      return writeProfile(profile);
     },
 
     async signIn(email, password) {
-      const deviceProfile = readProfile();
-      const data = await apiJson('/api/auth/signin', jsonOptions('POST', {
-        email: email,
-        password: password
-      }));
-      const user = data.user;
-      if (!user) throw new Error('Unable to sign in.');
+      const cleanEmail = normalizeEmail(email);
+      const accounts = readAccounts();
+      const id = 'account:' + cleanEmail;
+      const account = accounts[id];
+      if (!account) throw new Error('No pilot account found for that email.');
 
-      writeSession(user);
-      user.accountType = 'account';
-      const mergedProgress = mergeProgress(user.progress, deviceProfile.progress);
-      return saveAccountProgress(user.id, mergedProgress);
+      const hash = await hashPassword(password);
+      if (hash !== account.passwordHash) throw new Error('Incorrect password.');
+
+      const deviceProfile = readProfile();
+      account.progress = mergeProgress(account.progress, deviceProfile.progress);
+      writeAccounts(accounts);
+      writeSession({ id: account.id });
+      return toPublicUser(account);
     },
 
     async signUp(username, email, password) {
-      const deviceProfile = readProfile();
-      const data = await apiJson('/api/auth/signup', jsonOptions('POST', {
-        username: username,
-        email: email,
-        password: password,
-        confirmPassword: password
-      }));
-      const user = data.user;
-      if (!user) throw new Error('Unable to create account.');
+      const cleanEmail = normalizeEmail(email);
+      const cleanName = normalizeName(username);
+      if (!cleanEmail || !cleanEmail.includes('@')) throw new Error('Enter a valid email.');
+      if (!password || password.length < 6) throw new Error('Password must be at least 6 characters.');
 
-      writeSession(user);
-      user.accountType = 'account';
-      const mergedProgress = mergeProgress(user.progress, deviceProfile.progress);
-      return saveAccountProgress(user.id, mergedProgress);
+      const accounts = readAccounts();
+      const id = 'account:' + cleanEmail;
+      if (accounts[id]) throw new Error('An account with that email already exists.');
+
+      const deviceProfile = readProfile();
+      const passwordHash = await hashPassword(password);
+      const account = {
+        id: id,
+        username: cleanName,
+        email: cleanEmail,
+        passwordHash: passwordHash,
+        progress: Object.assign({}, deviceProfile.progress)
+      };
+      accounts[id] = account;
+      writeAccounts(accounts);
+      writeSession({ id: account.id });
+      return toPublicUser(account);
     },
 
     async signOut() {
       clearSession();
-      return null;
+      return readProfile();
     },
 
     async getLeaderboard() {
-      try {
-        const data = await apiJson('/api/leaderboard');
-        if (Array.isArray(data.leaderboard)) return data.leaderboard;
-      } catch (error) {
-        // Static builds and offline play still get a local leaderboard entry.
-      }
+      const accounts = readAccounts();
+      const rows = Object.keys(accounts).map(function (id) {
+        const account = accounts[id];
+        return {
+          userId: account.id,
+          username: account.username,
+          bestScore: (account.progress && account.progress.bestScore) || 0,
+          source: 'account'
+        };
+      });
 
       const profile = readProfile();
-      return [{
-        userId: profile.id,
-        username: profile.username,
-        bestScore: profile.progress.bestScore || 0,
-        source: profile.accountType || 'device'
-      }];
+      if (profile && profile.progress) {
+        rows.push({
+          userId: profile.id,
+          username: profile.username,
+          bestScore: profile.progress.bestScore || 0,
+          source: profile.accountType || 'device'
+        });
+      }
+
+      return rows.sort(function (a, b) { return b.bestScore - a.bestScore; });
     }
   };
 })();
