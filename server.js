@@ -486,8 +486,7 @@ app.get('/api/leaderboard', async function (_req, res) {
         p.updated_at AS updatedAt
        FROM user_progress p
        JOIN users u ON u.id = p.user_id
-       ORDER BY p.best_score DESC, p.updated_at ASC
-       LIMIT 50`
+       ORDER BY p.best_score DESC, p.updated_at ASC`
     );
 
     return res.json({

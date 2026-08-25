@@ -44,6 +44,13 @@ function writeProfile(profile) {
   return profile;
 }
 
+async function apiJson(path, options) {
+  const response = await fetch(path, options);
+  const data = await response.json().catch(function () { return {}; });
+  if (!response.ok) throw new Error(data.error || 'Request failed.');
+  return data;
+}
+
 (function () {
   window.GameDb = {
     defaults: { users: [DEFAULT_PROFILE] },
@@ -65,6 +72,13 @@ function writeProfile(profile) {
     },
 
     async getLeaderboard() {
+      try {
+        const data = await apiJson('/api/leaderboard');
+        if (Array.isArray(data.leaderboard)) return data.leaderboard;
+      } catch (error) {
+        // Static builds and offline play still get a local leaderboard entry.
+      }
+
       const profile = readProfile();
       return [{
         userId: profile.id,
