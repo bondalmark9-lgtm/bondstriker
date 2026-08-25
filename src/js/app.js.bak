@@ -1,0 +1,124 @@
+import '../css/style.css';
+import Phaser from 'phaser';
+
+const sizes = {
+  width: 500,
+  height: 500,
+};
+
+const speedDown = 300;
+
+class GameScene extends Phaser.Scene {
+  constructor() {
+    super('scene-game');
+    this.player = null;
+    this.apple = null;
+    this.cursors = null;
+    this.playerSpeed = speedDown + 40;
+    this.score = 0;
+    this.scoreText = null;
+    this.miss = 0;
+    this.bgMusic = null;
+    this.coinSound = null;
+  }
+
+  preload() {
+    this.load.image('bg', 'src/assets/images/maps/sakura_sky.jpg');
+    this.load.image('basket', 'src/assets/images/players/sakura.png');
+    this.load.image('apple', 'src/assets/images/ui/heart.png');
+    this.load.audio('bgMusic', 'src/assets/bgmusic.mp3');
+    this.load.audio('coin', 'src/assets/coin.mp3');
+  }
+
+  create() {
+    this.add.image(sizes.width / 2, sizes.height / 2, 'bg').setDisplaySize(sizes.width, sizes.height);
+
+    try {
+      this.bgMusic = this.sound.add('bgMusic', { loop: true, volume: 0.5 });
+      this.bgMusic.play();
+    } catch (e) {}
+
+    try {
+      this.coinSound = this.sound.add('coin', { volume: 1 });
+    } catch (e) {}
+
+    this.player = this.physics.add.sprite(sizes.width / 2, sizes.height - 60, 'basket');
+    this.player.setImmovable(true);
+    this.player.body.allowGravity = false;
+    this.player.setCollideWorldBounds(true);
+    this.player.setScale(0.35);
+
+    this.scoreText = this.add.text(10, 10, 'Score: 0', { fontSize: '24px', fill: 'black' });
+
+    this.spawnApple();
+    this.physics.add.overlap(this.player, this.apple, this.catchApple, null, this);
+    this.cursors = this.input.keyboard.createCursorKeys();
+  }
+
+  update() {
+    if (this.cursors.left.isDown) {
+      this.player.setVelocityX(-this.playerSpeed);
+    } else if (this.cursors.right.isDown) {
+      this.player.setVelocityX(this.playerSpeed);
+    } else {
+      this.player.setVelocityX(0);
+    }
+
+    if (this.apple.y > sizes.height + 20) {
+      this.miss += 1;
+      if (this.miss >= 3) {
+        this.score = 0;
+        this.scoreText.setText('Score: ' + this.score);
+        this.miss = 0;
+      }
+      this.spawnApple();
+      this.physics.add.overlap(this.player, this.apple, this.catchApple, null, this);
+    }
+  }
+
+  spawnApple() {
+    if (this.apple) {
+      this.apple.destroy();
+    }
+
+    const randomX = Phaser.Math.Between(30, sizes.width - 30);
+    this.apple = this.physics.add.sprite(randomX, 0, 'apple');
+    this.apple.setBounce(0);
+    this.apple.setGravityY(speedDown);
+    this.apple.setScale(0.18);
+  }
+
+  catchApple() {
+    this.score += 1;
+    if (this.coinSound) {
+      this.coinSound.play();
+    }
+    this.scoreText.setText('Score: ' + this.score);
+    this.spawnApple();
+    this.physics.add.overlap(this.player, this.apple, this.catchApple, null, this);
+  }
+}
+
+const config = {
+  type: Phaser.WEBGL,
+  width: sizes.width,
+  height: sizes.height,
+  canvas: document.getElementById('gameCanvas'),
+  physics: {
+    default: 'arcade',
+    arcade: {
+      gravity: { y: speedDown },
+      debug: false,
+    },
+  },
+  scene: [GameScene],
+};
+
+if (window.angular) {
+  const angularApp = window.angular.module('animeShooter', []);
+  angularApp.controller('MainCtrl', function ($scope) {
+    $scope.vm = { screen: 'game' };
+  });
+}
+
+new Phaser.Game(config);

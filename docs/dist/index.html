@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="animeShooter">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bondal.VOID STRIKER — Anime Bullet Squad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="icon" href="/assets/nova-PVtHE_Xb.png">
+  <script type="module" crossorigin src="/assets/index-CjGri1CI.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CfvdxR3p.css">
+</head>
+<body ng-controller="MainCtrl as vm">
+
+  <!-- Background + game render surface -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Floating HUD, only visible during actual play -->
+  <div class="hud" ng-show="vm.screen==='game'">
+    <div class="hud-left">
+      <div class="hud-chip"><span class="hud-label">LV</span><span class="hud-value">{{vm.level}}</span></div>
+      <div class="hud-chip"><span class="hud-label">SCORE</span><span class="hud-value">{{vm.score}}</span></div>
+    </div>
+    <div class="hud-lives">
+      <img class="heart" ng-repeat="h in vm.livesSlots" ng-class="{dim: $index >= vm.lives}" src="data:image/png;base64,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" alt="life">
+    </div>
+    <button class="pause-btn" ng-click="vm.pauseGame()">II</button>
+    <div class="boss-bar-wrap" ng-if="vm.bossActive">
+      <div class="boss-label">BOSS</div>
+      <div class="boss-bar-bg"><div class="boss-bar-fill" ng-style="{width: vm.bossHpPct + '%'}"></div></div>
+    </div>
+    <div class="wave-note" ng-if="!vm.bossActive">ENEMIES {{vm.spawned}}/{{vm.levelCfg.enemyCount}} · REMAINING {{vm.enemiesAlive}}</div>
+  </div>
+
+  <!-- Touch controls (mobile) -->
+  <div class="touch-controls" ng-show="vm.screen==='game' && vm.isTouch">
+    <div class="touch-move">
+      <button class="touch-btn" ng-mousedown="vm.setKey('left',true)" ng-mouseup="vm.setKey('left',false)"
+              ontouchstart="event.preventDefault();this.dispatchEvent(new Event('mousedown'))" ontouchend="this.dispatchEvent(new Event('mouseup'))">◀</button>
+      <button class="touch-btn" ng-mousedown="vm.setKey('right',true)" ng-mouseup="vm.setKey('right',false)"
+              ontouchstart="event.preventDefault();this.dispatchEvent(new Event('mousedown'))" ontouchend="this.dispatchEvent(new Event('mouseup'))">▶</button>
+    </div>
+    <button class="touch-btn fire" ng-mousedown="vm.setKey('fire',true)" ng-mouseup="vm.setKey('fire',false)"
+            ontouchstart="event.preventDefault();this.dispatchEvent(new Event('mousedown'))" ontouchend="this.dispatchEvent(new Event('mouseup'))">FIRE</button>
+  </div>
+
+  <!-- All menu / overlay screens -->
+  <div class="ui-layer" ng-include="'tpl-' + vm.screen"></div>
+
+  <!-- ============ TEMPLATES ============ -->
+
+  <script type="text/ng-template" id="tpl-signIn">
+    <div class="auth-scene">
+      <div class="auth-orb orb-a"></div>
+      <div class="auth-orb orb-b"></div>
+      <div class="panel auth-panel">
+        <div class="auth-badge">PILOT ACCESS</div>
+        <div class="auth-hero">
+          <img class="hero-art" ng-src="{{vm.players[vm.selectedPlayer].img}}" alt="">
+          <div class="auth-ring"></div>
+        </div>
+        <h1 class="logo">VOID <span>STRIKER</span></h1>
+        <p class="tagline">Sign in to load your pilot database.</p>
+        <form class="auth-form" ng-submit="vm.submitAuth()">
+          <div class="field-group">
+            <label class="field-label" for="signin-email">EMAIL</label>
+            <input id="signin-email" class="text-field" type="email" ng-model="vm.auth.email" autocomplete="email" placeholder="pilot@void.com" required>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="signin-password">PASSWORD</label>
+            <input id="signin-password" class="text-field" type="password" ng-model="vm.auth.password" autocomplete="current-password" placeholder="••••••••" required>
+          </div>
+          <div class="auth-error" ng-if="vm.authError">{{vm.authError}}</div>
+          <button class="btn btn-primary auth-submit" type="submit" ng-disabled="vm.authBusy">{{vm.authBusy ? 'WORKING...' : 'SIGN IN'}}</button>
+        </form>
+        <div class="auth-footer">
+          <span class="auth-footer-text">New to the squad?</span>
+          <button class="btn auth-switch" ng-click="vm.showAuth('signUp')">CREATE ACCOUNT</button>
+        </div>
+      </div>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-signUp">
+    <div class="auth-scene">
+      <div class="auth-orb orb-a"></div>
+      <div class="auth-orb orb-b"></div>
+      <div class="panel auth-panel">
+        <div class="auth-badge">NEW PILOT</div>
+        <div class="auth-hero">
+          <img class="hero-art" ng-src="{{vm.players[vm.selectedPlayer].img}}" alt="">
+          <div class="auth-ring"></div>
+        </div>
+        <h1 class="logo">VOID <span>STRIKER</span></h1>
+        <p class="tagline">Create a pilot profile and save progress.</p>
+        <form class="auth-form" ng-submit="vm.submitAuth()">
+          <div class="field-group">
+            <label class="field-label" for="signup-name">PILOT NAME</label>
+            <input id="signup-name" class="text-field" type="text" ng-model="vm.auth.username" autocomplete="username" minlength="3" placeholder="Nova Rider" required>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="signup-email">EMAIL</label>
+            <input id="signup-email" class="text-field" type="email" ng-model="vm.auth.email" autocomplete="email" placeholder="pilot@void.com" required>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="signup-password">PASSWORD</label>
+            <input id="signup-password" class="text-field" type="password" ng-model="vm.auth.password" autocomplete="new-password" minlength="6" placeholder="••••••••" required>
+          </div>
+          <div class="auth-error" ng-if="vm.authError">{{vm.authError}}</div>
+          <button class="btn btn-primary auth-submit" type="submit" ng-disabled="vm.authBusy">{{vm.authBusy ? 'WORKING...' : 'SIGN UP'}}</button>
+        </form>
+        <div class="auth-footer">
+          <span class="auth-footer-text">Already flying with us?</span>
+          <button class="btn auth-switch" ng-click="vm.showAuth('signIn')">BACK TO SIGN IN</button>
+        </div>
+      </div>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-menu">
+    <div class="panel menu-panel">
+      <img class="hero-art" ng-src="{{vm.players[vm.selectedPlayer].img}}" alt="">
+      <h1 class="logo">VOID <span>STRIKER</span></h1>
+      <p class="tagline">50 sorties. one sky. zero mercy.</p>
+      <div class="account-strip">
+        <span>{{vm.currentUser.username}}</span>
+        <button type="button" ng-click="vm.signOut()">SIGN OUT</button>
+      </div>
+      <nav class="menu-list">
+        <button class="btn btn-primary" ng-click="vm.goTo('levels')">▶ PLAY</button>
+        <button class="btn btn-icon" ng-click="vm.goTo('player')"><img ng-src="{{vm.players[vm.selectedPlayer].img}}" class="btn-thumb"> PILOT — {{vm.players[vm.selectedPlayer].name}}</button>
+        <button class="btn btn-icon" ng-click="vm.goTo('map')"><img ng-src="{{vm.maps[vm.selectedMap].img}}" class="btn-thumb map-thumb"> SECTOR — {{vm.maps[vm.selectedMap].name}}</button>
+        <button class="btn" ng-click="vm.goTo('settings')">SETTINGS</button>
+      </nav>
+      <div class="menu-footer">Best clear: LV {{vm.unlockedLevel > 1 ? vm.unlockedLevel - 1 : 0}} / 50</div>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-player">
+    <div class="panel">
+      <h2 class="panel-title">SELECT PILOT</h2>
+      <div class="card-grid">
+        <div class="pilot-card" ng-repeat="p in vm.players" ng-class="{active: $index === vm.selectedPlayer}" ng-click="vm.selectPlayer($index)">
+          <div class="art-frame"><img class="card-art" ng-src="{{p.img}}" alt="{{p.name}}"></div>
+          <div class="card-name">{{p.name}}</div>
+          <div class="card-desc">{{p.desc}}</div>
+          <div class="stat-row"><span>SPD</span><div class="stat-bar"><div class="stat-fill" ng-style="{width: p.speedStat+'%'}"></div></div></div>
+          <div class="stat-row"><span>ROF</span><div class="stat-bar"><div class="stat-fill" ng-style="{width: p.fireStat+'%'}"></div></div></div>
+          <div class="stat-row"><span>DMG</span><div class="stat-bar"><div class="stat-fill" ng-style="{width: p.dmgStat+'%'}"></div></div></div>
+        </div>
+      </div>
+      <button class="btn btn-back" ng-click="vm.goTo('menu')">◀ BACK</button>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-map">
+    <div class="panel">
+      <h2 class="panel-title">SELECT SECTOR</h2>
+      <div class="card-grid">
+        <div class="map-card" ng-repeat="m in vm.maps" ng-class="{active: $index === vm.selectedMap}" ng-click="vm.selectMap($index)">
+          <div class="art-frame"><img class="card-art" ng-src="{{m.img}}" alt="{{m.name}}"></div>
+          <div class="card-name">{{m.name}}</div>
+          <div class="card-desc">{{m.desc}}</div>
+        </div>
+      </div>
+      <button class="btn btn-back" ng-click="vm.goTo('menu')">◀ BACK</button>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-levels">
+    <div class="panel wide">
+      <h2 class="panel-title">SORTIE SELECT</h2>
+      <div class="tier" ng-repeat="tier in vm.tiers">
+        <div class="tier-label" ng-style="{color: tier.color}">{{tier.name}} · LV {{tier.from}}–{{tier.to}}</div>
+        <div class="level-grid">
+          <button class="level-btn" ng-repeat="n in tier.nums"
+                  ng-class="{locked: n > vm.unlockedLevel, boss: n % 10 === 0, active: n === vm.unlockedLevel}"
+                  ng-style="{'--tier-color': tier.color}"
+                  ng-disabled="n > vm.unlockedLevel"
+                  ng-click="vm.startLevel(n)">
+            <span ng-if="n % 10 !== 0">{{n}}</span>
+            <span ng-if="n % 10 === 0">☠{{n}}</span>
+          </button>
+        </div>
+      </div>
+      <button class="btn btn-back" ng-click="vm.goTo('menu')">◀ BACK</button>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-settings">
+    <div class="panel">
+      <h2 class="panel-title">SETTINGS</h2>
+      <div class="settings-list">
+        <div class="setting-row">
+          <label>SFX VOLUME</label>
+          <input type="range" min="0" max="1" step="0.05" ng-model="vm.settings.sfxVol" ng-change="vm.saveSettings()">
+          <span>{{(vm.settings.sfxVol*100) | number:0}}%</span>
+        </div>
+        <div class="setting-row">
+          <label>MUSIC VOLUME</label>
+          <input type="range" min="0" max="1" step="0.05" ng-model="vm.settings.musicVol" ng-change="vm.applyMusicVolume()">
+          <span>{{(vm.settings.musicVol*100) | number:0}}%</span>
+        </div>
+        <div class="setting-row">
+          <label>DIFFICULTY</label>
+          <div class="segmented">
+            <button ng-repeat="d in ['easy','normal','hard']" ng-class="{active: vm.settings.difficulty===d}" ng-click="vm.settings.difficulty=d; vm.saveSettings()">{{d}}</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label>CONTROLS</label>
+          <div class="segmented">
+            <button ng-class="{active: vm.settings.scheme==='arrows'}" ng-click="vm.settings.scheme='arrows'; vm.saveSettings()">ARROWS</button>
+            <button ng-class="{active: vm.settings.scheme==='wasd'}" ng-click="vm.settings.scheme='wasd'; vm.saveSettings()">WASD</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label>SCREEN SHAKE</label>
+          <div class="segmented">
+            <button ng-class="{active: vm.settings.screenShake}" ng-click="vm.settings.screenShake=true; vm.saveSettings()">ON</button>
+            <button ng-class="{active: !vm.settings.screenShake}" ng-click="vm.settings.screenShake=false; vm.saveSettings()">OFF</button>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-back" ng-click="vm.goTo('menu')">◀ BACK</button>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-pause">
+    <div class="panel narrow">
+      <h2 class="panel-title">PAUSED</h2>
+      <nav class="menu-list">
+        <button class="btn btn-primary" ng-click="vm.resumeGame()">▶ RESUME</button>
+        <button class="btn" ng-click="vm.restartLevel()">↻ RESTART SORTIE</button>
+        <button class="btn" ng-click="vm.goTo('settings')">SETTINGS</button>
+        <button class="btn btn-danger" ng-click="vm.quitToMenu()">■ QUIT TO MENU</button>
+      </nav>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-levelComplete">
+    <div class="panel narrow flash-in">
+      <h2 class="panel-title win">SORTIE CLEAR</h2>
+      <div class="result-line">LEVEL {{vm.level}} <span ng-if="vm.level % 10 === 0" class="boss-tag">BOSS DOWN</span></div>
+      <div class="result-line dim">Score {{vm.score}}</div>
+      <nav class="menu-list">
+        <button class="btn btn-primary" ng-if="vm.level < 50" ng-click="vm.nextLevel()">▶ NEXT SORTIE — LV {{vm.level+1}}</button>
+        <button class="btn" ng-click="vm.goTo('levels')">SORTIE SELECT</button>
+        <button class="btn" ng-click="vm.quitToMenu()">MAIN MENU</button>
+      </nav>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-gameOver">
+    <div class="panel narrow flash-in">
+      <h2 class="panel-title lose">SHOT DOWN</h2>
+      <div class="result-line dim">Reached LEVEL {{vm.level}} · Score {{vm.score}}</div>
+      <nav class="menu-list">
+        <button class="btn btn-primary" ng-click="vm.restartLevel()">↻ RETRY SORTIE</button>
+        <button class="btn" ng-click="vm.goTo('levels')">SORTIE SELECT</button>
+        <button class="btn" ng-click="vm.quitToMenu()">MAIN MENU</button>
+      </nav>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-victory">
+    <div class="panel narrow flash-in">
+      <h2 class="panel-title win">CAMPAIGN CLEAR</h2>
+      <p class="tagline">50 sorties down. the void sky is quiet again.</p>
+      <div class="result-line dim">Final Score {{vm.score}}</div>
+      <nav class="menu-list">
+        <button class="btn btn-primary" ng-click="vm.quitToMenu()">MAIN MENU</button>
+      </nav>
+    </div>
+  </script>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="animeShooter">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bondal.VOID STRIKER — Anime Bullet Squad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="icon" href="/assets/images/players/nova.png">
+<link rel="stylesheet" href="src/css/style.css">
+</head>
+<body ng-controller="MainCtrl as vm" ng-cloak>
+
+  <!-- Background + game render surface -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Floating HUD, only visible during actual play -->
+  <div class="hud" ng-show="vm.screen==='game'">
+    <div class="hud-left">
+      <div class="hud-chip"><span class="hud-label">WAVE</span><span class="hud-value">{{vm.wave}}</span></div>
+      <div class="hud-chip"><span class="hud-label">SCORE</span><span class="hud-value">{{vm.score}}</span></div>
+      <div class="hud-chip"><span class="hud-label">BEST</span><span class="hud-value">{{vm.topScore()}}</span></div>
+      <div class="hud-chip"><span class="hud-label">CREDITS</span><span class="hud-value">{{vm.money}}</span></div>
+    </div>
+    <div class="hud-lives">
+      <img class="heart" ng-repeat="h in vm.livesSlots" ng-class="{dim: $index >= vm.lives}" src="/assets/images/ui/heart.png" alt="life">
+    </div>
+    <button class="pause-btn" ng-click="vm.pauseGame()">⏸</button>
+    <div class="boss-bar-wrap" ng-if="vm.bossActive">
+      <div class="boss-label">BOSS</div>
+      <div class="boss-bar-bg"><div class="boss-bar-fill" ng-style="{width: vm.bossHpPct + '%'}"></div></div>
+    </div>
+    <div class="wave-note" ng-if="!vm.bossActive">
+      <span>ENEMIES</span>
+      <strong ng-bind="vm.spawned"></strong><span>/</span><strong ng-bind="vm.levelCfg.enemyCount || 0"></strong>
+      <span>REMAINING</span>
+      <strong ng-bind="vm.enemiesAlive"></strong>
+    </div>
+    <div class="wave-banner" ng-if="vm.showWaveBanner">{{vm.waveBanner}}</div>
+  </div>
+  <div class="touch-controls" ng-show="vm.screen==='game'">
+    <div class="touch-pad">
+      <button class="touch-btn" data-dir="up">▲</button>
+      <button class="touch-btn" data-dir="left">◀</button>
+      <button class="touch-btn" data-dir="down">▼</button>
+      <button class="touch-btn" data-dir="right">▶</button>
+    </div>
+    <div class="touch-status">TOUCH TO MOVE</div>
+  </div>
+
+
+  <!-- All menu / overlay screens -->
+  <div class="ui-layer" ng-include="'tpl-' + vm.screen"></div>
+
+  <!-- ============ TEMPLATES ============ -->
+
+
+  <script type="text/ng-template" id="tpl-menu">
+    <div class="panel menu-panel">
+      <img class="hero-art" ng-src="{{vm.players[vm.selectedPlayer].img}}" alt="">
+      <h1 class="logo">VOID <span>STRIKER</span></h1>
+      <p class="tagline">50 sorties. one sky. zero mercy.</p>
+      <div class="account-strip">
+        <span>{{vm.currentUser.username}}</span>
+      </div>
+      <nav class="menu-list">
+        <button class="btn btn-primary" ng-click="vm.startRun()">▶ PLAY</button>
+        <button class="btn btn-icon" ng-click="vm.goTo('player')"><img ng-src="{{vm.players[vm.selectedPlayer].img}}" class="btn-thumb"> PILOT — {{vm.players[vm.selectedPlayer].name}}</button>
+        <button class="btn btn-icon" ng-click="vm.goTo('map')"><img ng-src="{{vm.maps[vm.selectedMap].img}}" class="btn-thumb map-thumb"> SECTOR — {{vm.maps[vm.selectedMap].name}}</button>
+        <button class="btn" ng-click="vm.openLeaderboard()">🏆 LEADERBOARD</button>
+        <button class="btn" ng-click="vm.goTo('settings')">SETTINGS</button>
+      </nav>
+      <div class="menu-footer">Best score: {{vm.bestScore}}</div>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-player">
+    <div class="panel">
+      <h2 class="panel-title">SELECT PILOT</h2>
+      <div class="card-grid">
+        <div class="pilot-card" ng-repeat="p in vm.players" ng-class="{active: $index === vm.selectedPlayer, locked: !vm.purchasedPlayers[$index]}" ng-click="vm.buyPlayer($index)">
+          <div class="art-frame"><img class="card-art" ng-src="{{p.img}}" alt="{{p.name}}"></div>
+          <div class="card-name">{{p.name}}</div>
+          <div class="card-desc">{{p.desc}}</div>
+          <div class="stat-row"><span>SPD</span><div class="stat-bar"><div class="stat-fill" ng-style="{width: p.speedStat+'%'}"></div></div></div>
+          <div class="stat-row"><span>ROF</span><div class="stat-bar"><div class="stat-fill" ng-style="{width: p.fireStat+'%'}"></div></div></div>
+          <div class="stat-row"><span>DMG</span><div class="stat-bar"><div class="stat-fill" ng-style="{width: p.dmgStat+'%'}"></div></div></div>
+          <div class="card-cta">
+            <span ng-if="vm.purchasedPlayers[$index]">{{$index === vm.selectedPlayer ? 'SELECTED' : 'SELECT'}}</span>
+            <span ng-if="!vm.purchasedPlayers[$index]">{{vm.canAfford($index) ? ('BUY ' + p.cost) : ('LOCKED ' + p.cost)}}</span>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-back" ng-click="vm.goTo('menu')">◀ BACK</button>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-map">
+    <div class="panel">
+      <h2 class="panel-title">SELECT SECTOR</h2>
+      <div class="card-grid">
+        <div class="map-card" ng-repeat="m in vm.maps" ng-class="{active: $index === vm.selectedMap}" ng-click="vm.selectMap($index)">
+          <div class="art-frame"><img class="card-art" ng-src="{{m.img}}" alt="{{m.name}}"></div>
+          <div class="card-name">{{m.name}}</div>
+          <div class="card-desc">{{m.desc}}</div>
+        </div>
+      </div>
+      <button class="btn btn-back" ng-click="vm.goTo('menu')">◀ BACK</button>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-leaderboard">
+    <div class="panel wide">
+      <h2 class="panel-title">LEADERBOARD</h2>
+      <div ng-if="vm.leaderboardBusy" class="result-line dim">Loading pilot records…</div>
+      <div ng-if="vm.leaderboardError" class="auth-error">{{vm.leaderboardError}}</div>
+      <div class="leaderboard-list" ng-if="!vm.leaderboardBusy && !vm.leaderboardError">
+        <div class="leaderboard-empty result-line dim" ng-if="vm.leaderboard.length === 0">No pilot accounts found yet.</div>
+        <div class="leaderboard-row" ng-repeat="row in vm.leaderboard" ng-class="{me: vm.currentUser && row.username === vm.currentUser.username, top: $index === 0}">
+          <span class="lb-rank">{{$index + 1}}</span>
+          <span class="lb-name">{{row.username}}</span>
+          <span class="lb-score">{{row.bestScore}}</span>
+        </div>
+      </div>
+      <button class="btn btn-back" ng-click="vm.goTo('menu')">◀ BACK</button>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-settings">
+    <div class="panel">
+      <h2 class="panel-title">SETTINGS</h2>
+      <div class="settings-list">
+        <div class="setting-row">
+          <label>SFX VOLUME</label>
+          <input type="range" min="0" max="1" step="0.05" ng-model="vm.settings.sfxVol" ng-change="vm.saveSettings()">
+          <span>{{(vm.settings.sfxVol*100) | number:0}}%</span>
+        </div>
+        <div class="setting-row">
+          <label>MUSIC VOLUME</label>
+          <input type="range" min="0" max="1" step="0.05" ng-model="vm.settings.musicVol" ng-change="vm.applyMusicVolume()">
+          <span>{{(vm.settings.musicVol*100) | number:0}}%</span>
+        </div>
+        <div class="setting-row">
+          <label>SCREEN SHAKE</label>
+          <div class="segmented">
+            <button ng-class="{active: vm.settings.screenShake}" ng-click="vm.settings.screenShake=true; vm.saveSettings()">ON</button>
+            <button ng-class="{active: !vm.settings.screenShake}" ng-click="vm.settings.screenShake=false; vm.saveSettings()">OFF</button>
+          </div>
+        </div>
+        <div class="setting-row account-setting">
+          <label for="pilot-name">PILOT NAME</label>
+          <form class="name-form" ng-submit="vm.savePilotName()">
+            <input id="pilot-name" class="text-field" type="text" ng-model="vm.pilotName" maxlength="24" autocomplete="off">
+            <button class="btn name-save" type="submit">SAVE</button>
+          </form>
+        </div>
+        <div class="setting-message" ng-if="vm.nameError">{{vm.nameError}}</div>
+        <div class="setting-message saved" ng-if="vm.nameSaved">Saved</div>
+      </div>
+      <button class="btn btn-back" ng-click="vm.goTo('menu')">◀ BACK</button>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-pause">
+    <div class="panel narrow">
+      <h2 class="panel-title">PAUSED</h2>
+      <nav class="menu-list">
+        <button class="btn btn-primary" ng-click="vm.resumeGame()">▶ RESUME</button>
+        <button class="btn" ng-click="vm.restartRun()">↻ RESTART RUN</button>
+        <button class="btn" ng-click="vm.goTo('settings')">SETTINGS</button>
+        <button class="btn btn-danger" ng-click="vm.quitToMenu()">■ QUIT TO MENU</button>
+      </nav>
+    </div>
+  </script>
+
+  <script type="text/ng-template" id="tpl-gameOver">
+    <div class="panel narrow flash-in">
+      <h2 class="panel-title lose">SHOT DOWN</h2>
+      <div class="result-line">Reached WAVE {{vm.wave}}</div>
+      <div class="result-line dim">Score {{vm.score}}</div>
+      <div class="result-line" ng-if="vm.newBest">🏆 NEW BEST SCORE!</div>
+      <div class="result-line dim" ng-if="!vm.newBest">Best score {{vm.bestScore}}</div>
+      <nav class="menu-list">
+        <button class="btn btn-primary" ng-click="vm.restartRun()">↻ FLY AGAIN</button>
+        <button class="btn" ng-click="vm.openLeaderboard()">🏆 LEADERBOARD</button>
+        <button class="btn" ng-click="vm.quitToMenu()">MAIN MENU</button>
+      </nav>
+    </div>
+  </script>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular.min.js"></script>
+  <script type="module" src="/src/js/db.js"></script>
+  <script type="module" src="/src/js/app.js"></script>
+</body>
+</html>
