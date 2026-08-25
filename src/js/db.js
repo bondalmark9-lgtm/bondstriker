@@ -259,16 +259,6 @@ function mergeProgress(accountProgress, deviceProgress) {
         };
       });
 
-      const profile = readProfile();
-      if (profile && profile.progress) {
-        rows.push({
-          userId: profile.id,
-          username: profile.username,
-          bestScore: profile.progress.bestScore || 0,
-          source: profile.accountType || 'device'
-        });
-      }
-
       return rows.sort(function (a, b) { return b.bestScore - a.bestScore; });
     }
   };

@@ -37,7 +37,7 @@
       GameDb.getCurrentUser().then(function (user) {
         $scope.$applyAsync(function () {
           vm.currentUser = user;
-          if (user) {
+          if (user && user.accountType === 'account') {
             applyUserProgress(user);
             vm.screen = 'menu';
           } else {
