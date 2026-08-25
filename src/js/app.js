@@ -33,23 +33,7 @@
       const BULLET_ENEMY_IMG = ASSET_BASE + 'ui/bullet_enemy.png';
 
       vm.livesSlots = [0, 1, 2];
-      vm.screen = 'auth';
-      GameDb.getCurrentUser().then(function (user) {
-        $scope.$applyAsync(function () {
-          vm.currentUser = user;
-          if (user && user.accountType === 'account') {
-            applyUserProgress(user);
-            vm.screen = 'menu';
-          } else {
-            vm.screen = 'auth';
-          }
-        });
-      }).catch(function () {
-        $scope.$applyAsync(function () {
-          vm.currentUser = null;
-          vm.screen = 'auth';
-        });
-      });
+      vm.screen = 'menu';
       vm.selectedPlayer = 0;
       vm.selectedMap = 0;
       vm.wave = 1;
@@ -72,13 +56,8 @@
       vm.pilotName = '';
       vm.nameError = '';
       vm.nameSaved = false;
-      vm.authMode = 'signIn';
-      vm.auth = { username: '', email: '', password: '' };
-      vm.authError = '';
-      vm.authBusy = false;
 
       vm.topScore = function () { return Math.max(vm.bestScore, vm.score); };
-      vm.isSignedIn = function () { return vm.currentUser && vm.currentUser.accountType === 'account'; };
 
       const defaultSettings = {
         sfxVol: 0.7,
@@ -89,13 +68,9 @@
       };
       vm.settings = angular.copy(defaultSettings);
 
-      applyUserProgress(vm.currentUser);
+      loadProgress();
 
       vm.goTo = function (screen) {
-        if (!vm.isSignedIn() && screen !== 'auth') {
-          vm.screen = 'auth';
-          return;
-        }
         vm.screen = screen;
       };
       vm.selectPlayer = function (i) {
@@ -116,10 +91,6 @@
       };
 
       vm.startRun = function () {
-        if (!vm.isSignedIn()) {
-          vm.screen = 'auth';
-          return;
-        }
         vm.wave = 1;
         vm.score = 0;
         vm.lives = 3;
@@ -130,10 +101,6 @@
       vm.restartRun = vm.startRun;
       vm.pauseGame = function () { if (vm.screen === 'game') vm.screen = 'pause'; };
       vm.resumeGame = function () {
-        if (!vm.isSignedIn()) {
-          vm.screen = 'auth';
-          return;
-        }
         vm.screen = 'game';
       };
       vm.quitToMenu = function () { vm.goTo('menu'); };
@@ -146,63 +113,13 @@
           vm.nameError = 'Pilot name must be at least 2 characters.';
           return;
         }
-        GameDb.saveName(name).then(function (user) {
-          $scope.$applyAsync(function () {
-            vm.currentUser = user;
-            vm.pilotName = user.username;
-            vm.nameError = '';
-            vm.nameSaved = true;
-          });
-        }).catch(function (error) {
-          $scope.$applyAsync(function () {
-            vm.nameError = error.message || 'Could not save pilot name.';
-          });
-        });
-      };
-      vm.setAuthMode = function (mode) {
-        vm.authMode = mode;
-        vm.authError = '';
-      };
-      vm.submitAuth = function () {
-        vm.authError = '';
-        vm.authBusy = true;
-        const action = vm.authMode === 'signUp'
-          ? GameDb.signUp(vm.auth.username, vm.auth.email, vm.auth.password)
-          : GameDb.signIn(vm.auth.email, vm.auth.password);
-
-        action.then(function (user) {
-          $scope.$applyAsync(function () {
-            vm.currentUser = user;
-            applyUserProgress(user);
-            vm.auth.password = '';
-            vm.authError = '';
-            vm.authBusy = false;
-            vm.screen = 'menu';
-          });
-        }).catch(function (error) {
-          $scope.$applyAsync(function () {
-            vm.authBusy = false;
-            vm.authError = error.message || 'Could not connect account.';
-          });
-        });
-      };
-      vm.signOut = function () {
-        GameDb.signOut().then(function (user) {
-          $scope.$applyAsync(function () {
-            vm.currentUser = user;
-            applyUserProgress(null);
-            vm.auth.password = '';
-            vm.authError = '';
-            vm.screen = 'auth';
-          });
-        });
+        vm.pilotName = name;
+        vm.nameError = '';
+        vm.nameSaved = true;
+        saveProfile();
       };
 
       vm.openLeaderboard = function () {
-        if (!vm.isSignedIn()) {
-          vm.screen = 'auth';
-          return;
-        }
         vm.screen = 'leaderboard';
         vm.leaderboardBusy = true;
         vm.leaderboardError = '';
@@ -229,16 +146,23 @@
           .sort(function (a, b) { return b.bestScore - a.bestScore; });
       }
 
-      function applyUserProgress(user) {
-        if (!user || !user.progress) {
+      const PROGRESS_KEY = 'voidstriker.progress';
+
+      function loadProgress() {
+        let progress = null;
+        try {
+          const raw = localStorage.getItem(PROGRESS_KEY);
+          if (raw) progress = JSON.parse(raw);
+        } catch (e) { progress = null; }
+
+        if (!progress) {
           vm.money = 320;
           vm.bestScore = 0;
           vm.purchasedPlayers = [true, false, false, false, false, false, false, false];
           vm.pilotName = 'Guest Pilot';
           return;
         }
-        vm.pilotName = user.username || 'Guest Pilot';
-        const progress = user.progress;
+        vm.pilotName = progress.pilotName || 'Guest Pilot';
         vm.bestScore = Math.max(0, progress.bestScore || 0);
         vm.selectedPlayer = Math.max(0, Math.min(vm.players.length - 1, progress.selectedPlayer || 0));
         vm.selectedMap = Math.max(0, Math.min(vm.maps.length - 1, progress.selectedMap || 0));
@@ -251,8 +175,8 @@
       }
 
       function saveProfile() {
-        if (!vm.currentUser) return;
         const progress = {
+          pilotName: vm.pilotName,
           bestScore: vm.bestScore,
           selectedPlayer: vm.selectedPlayer,
           selectedMap: vm.selectedMap,
@@ -260,9 +184,7 @@
           money: vm.money,
           purchasedPlayers: vm.purchasedPlayers
         };
-        GameDb.saveProgress(vm.currentUser.id, progress).then(function (user) {
-          if (user) vm.currentUser = user;
-        }).catch(function () {});
+        try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch (e) { /* storage unavailable */ }
       }
 
       function difficultyMult() {

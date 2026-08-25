@@ -54,39 +54,6 @@
 
   <!-- ============ TEMPLATES ============ -->
 
-  <script type="text/ng-template" id="tpl-auth">
-    <div class="auth-scene">
-      <div class="panel auth-panel">
-        <div class="auth-badge">PILOT ACCESS REQUIRED</div>
-        <div class="auth-hero">
-          <div class="auth-ring"></div>
-          <img class="hero-art" ng-src="{{vm.players[vm.selectedPlayer].img}}" alt="">
-        </div>
-        <h1 class="logo">VOID <span>STRIKER</span></h1>
-        <p class="tagline">Sign in or create a pilot account to launch.</p>
-        <form class="auth-form" ng-submit="vm.submitAuth()">
-          <div class="segmented">
-            <button type="button" ng-class="{active: vm.authMode === 'signIn'}" ng-click="vm.setAuthMode('signIn')">LOG IN</button>
-            <button type="button" ng-class="{active: vm.authMode === 'signUp'}" ng-click="vm.setAuthMode('signUp')">SIGN UP</button>
-          </div>
-          <div class="field-group" ng-if="vm.authMode === 'signUp'">
-            <label class="field-label" for="gate-auth-name">PILOT NAME</label>
-            <input id="gate-auth-name" class="text-field" type="text" ng-model="vm.auth.username" autocomplete="username" minlength="3" maxlength="24">
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="gate-auth-email">EMAIL</label>
-            <input id="gate-auth-email" class="text-field" type="email" ng-model="vm.auth.email" autocomplete="email" required>
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="gate-auth-password">PASSWORD</label>
-            <input id="gate-auth-password" class="text-field" type="password" ng-model="vm.auth.password" autocomplete="{{vm.authMode === 'signUp' ? 'new-password' : 'current-password'}}" minlength="6" required>
-          </div>
-          <div class="auth-error" ng-if="vm.authError">{{vm.authError}}</div>
-          <button class="btn btn-primary auth-submit" type="submit" ng-disabled="vm.authBusy">{{vm.authBusy ? 'WORKING...' : (vm.authMode === 'signUp' ? 'CREATE PILOT' : 'LOG IN')}}</button>
-        </form>
-      </div>
-    </div>
-  </script>
 
   <script type="text/ng-template" id="tpl-menu">
     <div class="panel menu-panel">
@@ -94,7 +61,7 @@
       <h1 class="logo">VOID <span>STRIKER</span></h1>
       <p class="tagline">50 sorties. one sky. zero mercy.</p>
       <div class="account-strip">
-        <span>{{vm.currentUser.username}}</span>
+        <span>{{vm.pilotName}}</span>
       </div>
       <nav class="menu-list">
         <button class="btn btn-primary" ng-click="vm.startRun()">▶ PLAY</button>
@@ -149,9 +116,9 @@
       <div ng-if="vm.leaderboardError" class="auth-error">{{vm.leaderboardError}}</div>
       <div class="leaderboard-list" ng-if="!vm.leaderboardBusy && !vm.leaderboardError">
         <div class="leaderboard-empty result-line dim" ng-if="vm.leaderboard.length === 0">No pilot accounts found yet.</div>
-        <div class="leaderboard-row" ng-repeat="row in vm.leaderboard" ng-class="{me: vm.currentUser && row.username === vm.currentUser.username, top: $index === 0}">
+        <div class="leaderboard-row" ng-repeat="row in vm.leaderboard" ng-class="{me: row.username === vm.pilotName, top: $index === 0}">
           <span class="lb-rank">{{$index + 1}}</span>
-          <span class="lb-name">{{row.username}} <small ng-if="row.source">{{row.source}}</small></span>
+          <span class="lb-name">{{row.username}}</span>
           <span class="lb-score">{{row.bestScore}}</span>
         </div>
       </div>
@@ -189,36 +156,6 @@
         </div>
         <div class="setting-message" ng-if="vm.nameError">{{vm.nameError}}</div>
         <div class="setting-message saved" ng-if="vm.nameSaved">Saved</div>
-        <div class="settings-divider"></div>
-        <div class="account-card">
-          <div class="account-card-head">
-            <div>
-              <div class="account-kicker">ACCOUNT</div>
-              <div class="account-title">{{vm.isSignedIn() ? vm.currentUser.email : 'Device guest'}}</div>
-            </div>
-            <button class="btn account-action" type="button" ng-if="vm.isSignedIn()" ng-click="vm.signOut()">LOG OUT</button>
-          </div>
-          <form class="auth-form settings-auth" ng-if="!vm.isSignedIn()" ng-submit="vm.submitAuth()">
-            <div class="segmented">
-              <button type="button" ng-class="{active: vm.authMode === 'signIn'}" ng-click="vm.setAuthMode('signIn')">LOG IN</button>
-              <button type="button" ng-class="{active: vm.authMode === 'signUp'}" ng-click="vm.setAuthMode('signUp')">SIGN UP</button>
-            </div>
-            <div class="field-group" ng-if="vm.authMode === 'signUp'">
-              <label class="field-label" for="auth-name">PILOT NAME</label>
-              <input id="auth-name" class="text-field" type="text" ng-model="vm.auth.username" autocomplete="username" minlength="3" maxlength="24">
-            </div>
-            <div class="field-group">
-              <label class="field-label" for="auth-email">EMAIL</label>
-              <input id="auth-email" class="text-field" type="email" ng-model="vm.auth.email" autocomplete="email" required>
-            </div>
-            <div class="field-group">
-              <label class="field-label" for="auth-password">PASSWORD</label>
-              <input id="auth-password" class="text-field" type="password" ng-model="vm.auth.password" autocomplete="{{vm.authMode === 'signUp' ? 'new-password' : 'current-password'}}" minlength="6" required>
-            </div>
-            <div class="auth-error" ng-if="vm.authError">{{vm.authError}}</div>
-            <button class="btn btn-primary auth-submit" type="submit" ng-disabled="vm.authBusy">{{vm.authBusy ? 'WORKING...' : (vm.authMode === 'signUp' ? 'SIGN UP' : 'LOG IN')}}</button>
-          </form>
-        </div>
       </div>
       <button class="btn btn-back" ng-click="vm.goTo('menu')">◀ BACK</button>
     </div>
