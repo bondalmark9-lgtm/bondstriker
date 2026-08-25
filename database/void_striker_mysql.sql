@@ -8,6 +8,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 DROP TABLE IF EXISTS user_purchased_players;
 DROP TABLE IF EXISTS user_progress;
+DROP TABLE IF EXISTS device_profiles;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS levels;
 DROP TABLE IF EXISTS level_tiers;
@@ -77,6 +78,14 @@ CREATE TABLE users (
   email VARCHAR(255) NOT NULL UNIQUE,
   salt CHAR(32) NOT NULL,
   password_hash CHAR(64) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE device_profiles (
+  device_id CHAR(36) PRIMARY KEY,
+  username VARCHAR(80) NOT NULL,
+  best_score INT UNSIGNED NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -162,3 +171,4 @@ CREATE INDEX idx_players_cost ON players(cost);
 CREATE INDEX idx_levels_tier_id ON levels(tier_id);
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_user_progress_best_score ON user_progress(best_score);
+CREATE INDEX idx_device_profiles_best_score ON device_profiles(best_score);

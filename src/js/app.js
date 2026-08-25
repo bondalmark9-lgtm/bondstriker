@@ -67,8 +67,13 @@
       vm.pilotName = '';
       vm.nameError = '';
       vm.nameSaved = false;
+      vm.authMode = 'signIn';
+      vm.auth = { username: '', email: '', password: '' };
+      vm.authError = '';
+      vm.authBusy = false;
 
       vm.topScore = function () { return Math.max(vm.bestScore, vm.score); };
+      vm.isSignedIn = function () { return vm.currentUser && vm.currentUser.accountType === 'account'; };
 
       const defaultSettings = {
         sfxVol: 0.7,
@@ -130,6 +135,42 @@
         }).catch(function (error) {
           $scope.$applyAsync(function () {
             vm.nameError = error.message || 'Could not save pilot name.';
+          });
+        });
+      };
+      vm.setAuthMode = function (mode) {
+        vm.authMode = mode;
+        vm.authError = '';
+      };
+      vm.submitAuth = function () {
+        vm.authError = '';
+        vm.authBusy = true;
+        const action = vm.authMode === 'signUp'
+          ? GameDb.signUp(vm.auth.username, vm.auth.email, vm.auth.password)
+          : GameDb.signIn(vm.auth.email, vm.auth.password);
+
+        action.then(function (user) {
+          $scope.$applyAsync(function () {
+            vm.currentUser = user;
+            applyUserProgress(user);
+            vm.auth.password = '';
+            vm.authError = '';
+            vm.authBusy = false;
+          });
+        }).catch(function (error) {
+          $scope.$applyAsync(function () {
+            vm.authBusy = false;
+            vm.authError = error.message || 'Could not connect account.';
+          });
+        });
+      };
+      vm.signOut = function () {
+        GameDb.signOut().then(function (user) {
+          $scope.$applyAsync(function () {
+            vm.currentUser = user;
+            applyUserProgress(user);
+            vm.auth.password = '';
+            vm.authError = '';
           });
         });
       };

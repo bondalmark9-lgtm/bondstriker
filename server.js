@@ -99,6 +99,14 @@ async function ensureDatabase() {
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS device_profiles (
+        device_id CHAR(36) PRIMARY KEY,
+        username VARCHAR(80) NOT NULL,
+        best_score INT UNSIGNED NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      );
+
       CREATE TABLE IF NOT EXISTS user_progress (
         user_id CHAR(36) PRIMARY KEY,
         unlocked_level TINYINT UNSIGNED NOT NULL DEFAULT 1,
@@ -204,6 +212,11 @@ app.use(express.json());
 
 function normalizeUsername(username) {
   return String(username || '').trim();
+}
+
+function normalizeDeviceId(deviceId) {
+  const clean = String(deviceId || '').trim();
+  return /^[0-9a-f-]{36}$/i.test(clean) ? clean : '';
 }
 
 function normalizeEmail(email) {
@@ -405,6 +418,29 @@ app.post('/api/auth/signin', async function (req, res) {
   }
 });
 
+app.patch('/api/users/:id/profile', async function (req, res) {
+  const username = normalizeUsername(req.body.username);
+  if (username.length < 2) return sendError(res, 400, 'Pilot name must be at least 2 characters.');
+
+  try {
+    const connection = await pool.getConnection();
+    try {
+      const [result] = await connection.execute(
+        'UPDATE users SET username = ? WHERE id = ?',
+        [username, req.params.id]
+      );
+      if (!result.affectedRows) return sendError(res, 404, 'User not found.');
+
+      const user = await publicUser(connection, req.params.id);
+      return res.json({ user: user });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    return sendError(res, 500, 'Unable to save pilot name.');
+  }
+});
+
 app.patch('/api/users/:id/progress', async function (req, res) {
   const progress = req.body.progress || {};
   const settings = progress.settings || {};
@@ -476,17 +512,60 @@ app.patch('/api/users/:id/progress', async function (req, res) {
   }
 });
 
+app.post('/api/device-progress', async function (req, res) {
+  const deviceId = normalizeDeviceId(req.body.deviceId);
+  const username = normalizeUsername(req.body.username) || 'Guest Pilot';
+  const progress = req.body.progress || {};
+  const bestScore = Math.max(0, Number(progress.bestScore || 0));
+
+  if (!deviceId) return sendError(res, 400, 'Device id is required.');
+
+  try {
+    await pool.execute(
+      `INSERT INTO device_profiles (device_id, username, best_score)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         username = VALUES(username),
+         best_score = GREATEST(best_score, VALUES(best_score))`,
+      [deviceId, username, bestScore]
+    );
+
+    return res.json({
+      user: {
+        id: 'device:' + deviceId,
+        username: username,
+        accountType: 'device',
+        progress: { bestScore: bestScore }
+      }
+    });
+  } catch (error) {
+    return sendError(res, 500, 'Unable to save device score.');
+  }
+});
+
 app.get('/api/leaderboard', async function (_req, res) {
   try {
     const [rows] = await pool.execute(
-      `SELECT
-        u.id AS userId,
-        u.username,
-        p.best_score AS bestScore,
-        p.updated_at AS updatedAt
-       FROM user_progress p
-       JOIN users u ON u.id = p.user_id
-       ORDER BY p.best_score DESC, p.updated_at ASC`
+      `SELECT userId, username, bestScore, updatedAt, source
+       FROM (
+         SELECT
+           CONCAT('user:', u.id) AS userId,
+           u.username AS username,
+           p.best_score AS bestScore,
+           p.updated_at AS updatedAt,
+           'account' AS source
+         FROM user_progress p
+         JOIN users u ON u.id = p.user_id
+         UNION ALL
+         SELECT
+           CONCAT('device:', d.device_id) AS userId,
+           d.username AS username,
+           d.best_score AS bestScore,
+           d.updated_at AS updatedAt,
+           'device' AS source
+         FROM device_profiles d
+       ) scores
+       ORDER BY bestScore DESC, updatedAt ASC`
     );
 
     return res.json({
@@ -495,7 +574,8 @@ app.get('/api/leaderboard', async function (_req, res) {
           userId: row.userId,
           username: row.username,
           bestScore: Number(row.bestScore),
-          updatedAt: row.updatedAt
+          updatedAt: row.updatedAt,
+          source: row.source
         };
       })
     });
